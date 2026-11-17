@@ -11,14 +11,55 @@ env:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install ALSA dev dependencies
-      run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
-    - name: Build
-      run: cargo build --verbose
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+
+    - name: Cache cargo registry & build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Build (release)
+      run: cargo build --release --verbose --target x86_64-pc-windows-msvc
+
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --release --verbose --target x86_64-pc-windows-msvc
+
+    - name: Prepare package directory
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path package | Out-Null
+        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.exe" -Destination package -ErrorAction SilentlyContinue
+        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.dll" -Destination package -ErrorAction SilentlyContinue
+        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.pdb" -Destination package -ErrorAction SilentlyContinue
+        # 如有额外资源文件（如 assets、config 等），可在此一并复制：
+        # Copy-Item -Path "assets" -Destination package -Recurse -ErrorAction SilentlyContinue
+
+    - name: Create ZIP archive
+      shell: pwsh
+      run: |
+        $zipName = "rust-windows-x86_64.zip"
+        if (Test-Path $zipName) { Remove-Item $zipName }
+        Compress-Archive -Path "package/*" -DestinationPath $zipName -CompressionLevel Optimal
+        Get-Item $zipName | Format-List Name, Length
+
+    - name: Upload Windows ZIP artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rust-windows-x86_64
+        path: rust-windows-x86_64.zip
+        if-no-files-found: error
+        retention-days: 30
