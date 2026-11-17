@@ -22,6 +22,17 @@ impl Default for FamilyFilter {
 }
 
 impl FamilyFilter {
+    pub(super) fn vocoder(r3: bool) -> Self { Self([r3, r3, !r3, !r3, false, false]) }
+
+    pub(super) fn show_vocoder(ui: &mut Ui, r3: bool) {
+        ui.add_enabled_ui(false, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(5.0, 4.0);
+                for label in &LABELS[if r3 { 0..2 } else { 2..4 }] { let _ = toggle(ui, label, true); }
+            });
+        });
+    }
+
     pub(super) fn includes(self, entry: &VoiceCatalogEntry) -> bool {
         // Unclassified entries remain available in the unfiltered catalogue.
         self.0.get(category_of(entry) as usize).copied().unwrap_or(self.all())
