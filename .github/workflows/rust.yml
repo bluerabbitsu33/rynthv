@@ -75,7 +75,7 @@ jobs:
         Copy-Item -Path "$src/*.dll" -Destination package -ErrorAction SilentlyContinue
         Copy-Item -Path "$src/*.pdb" -Destination package -ErrorAction SilentlyContinue
         # 如有额外资源文件（assets、config 等）可在此复制：
-        # Copy-Item -Path "assets" -Destination package -Recurse -ErrorAction SilentlyContinue
+        Copy-Item -Path "assets" -Destination package -Recurse -ErrorAction SilentlyContinue
 
     - name: Create ZIP archive
       shell: pwsh
