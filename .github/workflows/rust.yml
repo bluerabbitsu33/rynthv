@@ -5,6 +5,16 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "构建模式"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,26 +42,47 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Build (release)
-      run: cargo build --release --verbose --target x86_64-pc-windows-msvc
+    - name: Build
+      shell: pwsh
+      run: |
+        $profile = "${{ github.event.inputs.build_profile }}"
+        if ([string]::IsNullOrEmpty($profile)) { $profile = "release" }
+        if ($profile -eq "release") {
+          cargo build --release --verbose --target x86_64-pc-windows-msvc
+        } else {
+          cargo build --verbose --target x86_64-pc-windows-msvc
+        }
 
     - name: Run tests
-      run: cargo test --release --verbose --target x86_64-pc-windows-msvc
+      shell: pwsh
+      run: |
+        $profile = "${{ github.event.inputs.build_profile }}"
+        if ([string]::IsNullOrEmpty($profile)) { $profile = "release" }
+        if ($profile -eq "release") {
+          cargo test --release --verbose --target x86_64-pc-windows-msvc
+        } else {
+          cargo test --verbose --target x86_64-pc-windows-msvc
+        }
 
     - name: Prepare package directory
       shell: pwsh
       run: |
+        $profile = "${{ github.event.inputs.build_profile }}"
+        if ([string]::IsNullOrEmpty($profile)) { $profile = "release" }
+        $src = "target/x86_64-pc-windows-msvc/$profile"
         New-Item -ItemType Directory -Force -Path package | Out-Null
-        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.exe" -Destination package -ErrorAction SilentlyContinue
-        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.dll" -Destination package -ErrorAction SilentlyContinue
-        Copy-Item -Path "target/x86_64-pc-windows-msvc/release/*.pdb" -Destination package -ErrorAction SilentlyContinue
-        # 如有额外资源文件（如 assets、config 等），可在此一并复制：
+        Copy-Item -Path "$src/*.exe" -Destination package -ErrorAction SilentlyContinue
+        Copy-Item -Path "$src/*.dll" -Destination package -ErrorAction SilentlyContinue
+        Copy-Item -Path "$src/*.pdb" -Destination package -ErrorAction SilentlyContinue
+        # 如有额外资源文件（assets、config 等）可在此复制：
         # Copy-Item -Path "assets" -Destination package -Recurse -ErrorAction SilentlyContinue
 
     - name: Create ZIP archive
       shell: pwsh
       run: |
-        $zipName = "rust-windows-x86_64.zip"
+        $profile = "${{ github.event.inputs.build_profile }}"
+        if ([string]::IsNullOrEmpty($profile)) { $profile = "release" }
+        $zipName = "rust-windows-x86_64-$profile.zip"
         if (Test-Path $zipName) { Remove-Item $zipName }
         Compress-Archive -Path "package/*" -DestinationPath $zipName -CompressionLevel Optimal
         Get-Item $zipName | Format-List Name, Length
@@ -59,7 +90,7 @@ jobs:
     - name: Upload Windows ZIP artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rust-windows-x86_64
-        path: rust-windows-x86_64.zip
+        name: rust-windows-x86_64-${{ github.event.inputs.build_profile || 'release' }}
+        path: rust-windows-x86_64-*.zip
         if-no-files-found: error
         retention-days: 30
